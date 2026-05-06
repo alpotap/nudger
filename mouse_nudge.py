@@ -1,8 +1,10 @@
 import ctypes
 import time
+from datetime import datetime, time as dt_time
 
 INTERVAL_SECONDS = 60  # Move mouse every 60 seconds
 PIXELS_RIGHT = 2
+AUTO_STOP_TIME = dt_time(hour=18, minute=0)
 
 # Windows API constants for mouse_event
 MOUSEEVENTF_MOVE = 0x0001
@@ -49,17 +51,39 @@ def trigger_input_activity() -> None:
     keyboard_event(VK_SHIFT, 2)  # KEYUP (flag 2 = KEYEVENTF_KEYUP)
 
 
+def seconds_until_stop(now: datetime | None = None) -> float:
+    """Return seconds until today's auto-stop time (18:00 local time)."""
+    current = now or datetime.now()
+    stop_at = datetime.combine(current.date(), AUTO_STOP_TIME)
+    return max(0.0, (stop_at - current).total_seconds())
+
+
+def reached_stop_time(now: datetime | None = None) -> bool:
+    """Whether current local time has reached or passed today's auto-stop time."""
+    current = now or datetime.now()
+    return current.time() >= AUTO_STOP_TIME
+
+
 def main() -> None:
     print("Mouse nudge started - preventing Windows sleep and Teams away status")
     print(f"Activity will be triggered every {INTERVAL_SECONDS} seconds")
+    print(f"Auto-stop is enabled at {AUTO_STOP_TIME.strftime('%H:%M')} local time")
     
     while True:
+        if reached_stop_time():
+            print(f"Reached auto-stop time ({AUTO_STOP_TIME.strftime('%H:%M')}). Exiting.")
+            break
+
         try:
             trigger_input_activity()
-            time.sleep(INTERVAL_SECONDS)
+            sleep_seconds = min(float(INTERVAL_SECONDS), seconds_until_stop())
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds)
         except Exception as e:
             print(f"Error: {e}")
-            time.sleep(5)
+            sleep_seconds = min(5.0, seconds_until_stop())
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds)
 
 
 if __name__ == "__main__":
